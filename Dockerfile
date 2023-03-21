@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest
+FROM ubuntu:22.04
 MAINTAINER Alexander Wellbrock <a.wellbrock@mailbox.org>
 
 ### X11 server: inspired by suchja/x11server and suchja/wine ###
@@ -16,9 +16,11 @@ RUN addgroup --system starcraft \
     starcraft \
   && adduser starcraft sudo
 
+RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+
 # Install packages for building the image
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends \
+  && apt-get install -y \
     curl \
     unzip \
     p7zip \
@@ -26,7 +28,12 @@ RUN apt-get update -y \
     vim \
     sudo \
     apt-transport-https \
-    winbind
+    winbind \
+    gpg-agent \
+    wget \
+    tigervnc-standalone-server \
+    tigervnc-xorg-extension
+
 
 # Install packages required for connecting against X Server
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -42,14 +49,14 @@ ENV DISPLAY :0.0
 ENV WINE_MONO_VERSION 4.6.4
 ENV WINE_GECKO_VERSION 2.47
 
-RUN curl -SL https://dl.winehq.org/wine-builds/Release.key -o Release.key \
-  && apt-key add Release.key \
-  && apt-add-repository 'https://dl.winehq.org/wine-builds/ubuntu/'
+RUN mkdir -pm755 /etc/apt/keyrings \
+  && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
+  && wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources
 
 # Install wine and related packages
 RUN dpkg --add-architecture i386 \
   && apt-get update -y \
-  && apt-get install -y --no-install-recommends \
+  && apt-get install -y --install-recommends \
     winehq-stable \
   && rm -rf /var/lib/apt/lists/*
 
@@ -64,14 +71,18 @@ ENV WINEARCH=win32
 # However they should not be removed because wine will then complain
 # that they are gone, blocking all other gui applications.
 RUN mkdir /opt/wine-stable/share/wine/mono \
-    && curl -L https://dl.winehq.org/wine/wine-mono/4.6.4/wine-mono-4.6.4.msi -o /opt/wine-stable/share/wine/mono/wine-mono-4.6.4.msi
+    && curl -L https://dl.winehq.org/wine/wine-mono/7.4.0/wine-mono-7.4.0-x86.msi -o /opt/wine-stable/share/wine/mono/wine-mono-7.4.0-x86.msi
 RUN mkdir /opt/wine-stable/share/wine/gecko \
-    && curl -L https://dl.winehq.org/wine/wine-gecko/2.47/wine_gecko-2.47-x86.msi -o /opt/wine-stable/share/wine/gecko/wine_gecko-2.47-x86.msi
+    && curl -L https://dl.winehq.org/wine/wine-gecko/2.47.3/wine-gecko-2.47.3-x86.msi -o /opt/wine-stable/share/wine/gecko/wine-gecko-2.47.3-x86.msi
+
+RUN mkdir ~/.Xauthority && mkdir ~/.vnc
 
 # Starting an x server before running wine init prevents some errors
 RUN Xvfb :0 -auth ~/.Xauthority -screen 0 1024x768x24 >> /var/log/xvfb.log 2>&1 & \
     su -c "wine wineboot --init" starcraft \
     && su -c "winetricks -q vcrun2013" starcraft
+
+RUN rm /tmp/.X0-lock
 
 ENV BOT_DIR /home/starcraft/.wine/drive_c/bot
 ENV BOT_PATH=$BOT_DIR/bot.dll BOT_DEBUG_PATH=$BOT_DIR/bot_d.dll
@@ -104,5 +115,12 @@ RUN chown -R starcraft:starcraft /home/starcraft/
 
 ADD entrypoint.sh /bin/entrypoint
 RUN chmod +x /bin/entrypoint
+
+WORKDIR $STARCRAFT
+
+RUN wget -q http://files.theabyss.ru/sc/starcraft.zip
+RUN unzip starcraft.zip
+
+WORKDIR $BOT_DIR
 
 ENTRYPOINT ["entrypoint"]

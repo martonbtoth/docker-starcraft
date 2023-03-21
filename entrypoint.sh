@@ -8,8 +8,10 @@ cat $STARCRAFT/bwapi-data/bwapi.ini
 
 # Setup vnc server settings and password
 printf "Starting X and VNC servers...\n"
-Xvfb :0 -auth ~/.Xauthority -screen 0 1024x768x24 >> /var/log/xvfb.log 2>&1 &
-x11vnc -forever -passwd melon -display :0 >> /var/log/xvnc.log 2>&1 &
+#Xvfb :0 -auth ~/.Xauthority -screen 0 1024x768x24 >> /var/log/xvfb.log 2>&1 &
+#x11vnc -forever -passwd melon -display :0 >> /var/log/xvnc.log 2>&1 &
+echo melon | vncpasswd -f > ~/.vnc/passwd
+vncserver -display :0 -localhost no -PasswordFile ~/.vnc/passwd >> /var/log/tigervnc.log 2>&1 &
 printf "Initializing wine environment in $WINEPREFIX...\n"
 su -c "wine wineboot --update" starcraft
 if [ -e "$STARCRAFT/StarCraft.exe" ]; then
